@@ -5,7 +5,7 @@ defmodule YourApp do
     import Supervisor.Spec
 
     children = [
-      # supervisor(YourApp.Endpoint, []),
+      supervisor(YourApp.Endpoint, [])
     ]
 
     Supervisor.start_link(children, strategy: :one_for_one, name: YourApp.Supervisor)
