@@ -9,12 +9,12 @@ defmodule YourApp.Router do
 
   # get "/cats"
   def do_match(conn, "GET", ["cats"]) do
-    YourApp.Controller.index(conn)
+    YourApp.Controller.call(conn, :index)
   end
 
   # get "/cats/felix"
   def do_match(conn, "GET", ["cats", "felix"]) do
-    YourApp.Controller.show(conn)
+    YourApp.Controller.call(conn, :show)
   end
 
   # post "/cats"
