@@ -7,14 +7,5 @@ defmodule YourApp.Endpoint do
   use Plug.Builder
 
   plug(Plug.Logger)
-  plug(:hello)
-  plug(:world)
-
-  def hello(conn, _opts) do
-    put_private(conn, :name, "world")
-  end
-
-  def world(conn, _opts) do
-    send_resp(conn, 200, "hello #{conn.private.name}")
-  end
+  plug(YourApp.Router)
 end
