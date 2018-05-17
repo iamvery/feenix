@@ -1,5 +1,7 @@
-%{"cowboy": {:hex, :cowboy, "1.0.4", "a324a8df9f2316c833a470d918aaf73ae894278b8aa6226ce7a9bf699388f878", [:rebar, :make], [{:cowlib, "~> 1.0.0", [hex: :cowlib, optional: false]}, {:ranch, "~> 1.0", [hex: :ranch, optional: false]}]},
-  "cowlib": {:hex, :cowlib, "1.0.2", "9d769a1d062c9c3ac753096f868ca121e2730b9a377de23dec0f7e08b1df84ee", [:make], []},
-  "mime": {:hex, :mime, "1.0.1", "05c393850524767d13a53627df71beeebb016205eb43bfbd92d14d24ec7a1b51", [:mix], []},
-  "plug": {:hex, :plug, "1.2.0", "496bef96634a49d7803ab2671482f0c5ce9ce0b7b9bc25bc0ae8e09859dd2004", [:mix], [{:cowboy, "~> 1.0", [hex: :cowboy, optional: true]}, {:mime, "~> 1.0", [hex: :mime, optional: false]}]},
-  "ranch": {:hex, :ranch, "1.2.1", "a6fb992c10f2187b46ffd17ce398ddf8a54f691b81768f9ef5f461ea7e28c762", [:make], []}}
+%{
+  "cowboy": {:hex, :cowboy, "2.4.0", "f1b72fabe9c8a5fc64ac5ac85fb65474d64733d1df52a26fad5d4ba3d9f70a9f", [:rebar3], [{:cowlib, "~> 2.3.0", [hex: :cowlib, repo: "hexpm", optional: false]}, {:ranch, "~> 1.5.0", [hex: :ranch, repo: "hexpm", optional: false]}], "hexpm"},
+  "cowlib": {:hex, :cowlib, "2.3.0", "bbd58ef537904e4f7c1dd62e6aa8bc831c8183ce4efa9bd1150164fe15be4caa", [:rebar3], [], "hexpm"},
+  "mime": {:hex, :mime, "1.2.0", "78adaa84832b3680de06f88f0997e3ead3b451a440d183d688085be2d709b534", [:mix], [], "hexpm"},
+  "plug": {:hex, :plug, "1.5.1", "1ff35bdecfb616f1a2b1c935ab5e4c47303f866cb929d2a76f0541e553a58165", [:mix], [{:cowboy, "~> 1.0.1 or ~> 1.1 or ~> 2.3", [hex: :cowboy, repo: "hexpm", optional: true]}, {:mime, "~> 1.0", [hex: :mime, repo: "hexpm", optional: false]}], "hexpm"},
+  "ranch": {:hex, :ranch, "1.5.0", "f04166f456790fee2ac1aa05a02745cc75783c2bfb26d39faf6aefc9a3d3a58a", [:rebar3], [], "hexpm"},
+}
