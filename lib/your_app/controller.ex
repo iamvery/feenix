@@ -1,13 +1,15 @@
 defmodule YourApp.Controller do
-  # def index(conn) do
-  #   send_resp(conn, 200, "meows")
-  # end
+  import Plug.Conn
 
-  # def show(conn) do
-  #   send_resp(conn, 200, "just meow")
-  # end
+  def index(conn) do
+    send_resp(conn, 200, "meows")
+  end
 
-  # def create(conn) do
-  #   send_resp(conn, 201, "meow!")
-  # end
+  def show(conn) do
+    send_resp(conn, 200, "just meow")
+  end
+
+  def create(conn) do
+    send_resp(conn, 201, "meow!")
+  end
 end
