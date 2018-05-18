@@ -1,18 +1,19 @@
 defmodule YourApp.Controller do
   use Feenix.Controller
 
+  plug(:fetch_query_params)
   plug(:assigns_kitty_count)
 
-  def index(conn) do
+  def index(conn, _params) do
     send_resp(conn, 200, "#{conn.assigns.count} meows")
   end
 
-  def show(conn) do
+  def show(conn, _params) do
     send_resp(conn, 200, "just meow")
   end
 
-  def create(conn) do
-    send_resp(conn, 201, "meow!")
+  def create(conn, %{"name" => name}) do
+    send_resp(conn, 201, "#{name} meow!")
   end
 
   defp assigns_kitty_count(conn, _opts) do

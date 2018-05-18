@@ -12,7 +12,7 @@ defmodule Feenix.Controller do
       end
 
       def apply_action(conn, _opts) do
-        apply(__MODULE__, conn.private.action, [conn])
+        apply(__MODULE__, conn.private.action, [conn, conn.params])
       end
     end
   end
