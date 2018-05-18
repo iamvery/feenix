@@ -2,6 +2,9 @@ defmodule Feenix.Router do
   defmacro __using__(_opts) do
     quote do
       @before_compile unquote(__MODULE__)
+
+      import unquote(__MODULE__).DSL
+
       use Plug.Builder
 
       def match(conn, _opts) do

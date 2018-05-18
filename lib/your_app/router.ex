@@ -1,15 +1,8 @@
 defmodule YourApp.Router do
   use Feenix.Router
 
-  # get "/cats"
-  def do_match(conn, "GET", ["cats"]) do
-    YourApp.Controller.call(conn, :index)
-  end
-
-  # get "/cats/felix"
-  def do_match(conn, "GET", ["cats", "felix"]) do
-    YourApp.Controller.call(conn, :show)
-  end
+  get "/cats", YourApp.Controller, :index
+  get "/cats/felix", YourApp.Controller, :show
 
   # post "/cats"
   def do_match(conn, "POST", ["cats"]) do
