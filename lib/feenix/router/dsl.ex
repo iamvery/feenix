@@ -1,10 +1,9 @@
 defmodule Feenix.Router.DSL do
-  defmacro get(path, module, action) do
-    build("GET", path, module, action)
-  end
-
-  defmacro post(path, module, action) do
-    build("POST", path, module, action)
+  for method <- [:get, :post, :put, :patch, :delete] do
+    defmacro unquote(method)(path, module, action) do
+      method = Plug.Router.Utils.normalize_method(unquote(method))
+      build(method, path, module, action)
+    end
   end
 
   defp build(method, path, module, action) do
