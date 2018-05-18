@@ -16,6 +16,10 @@ defmodule Feenix.Router do
   defmacro __before_compile__(_env) do
     quote do
       plug(:match)
+
+      def do_match(conn, _method, _path_info) do
+        send_resp(conn, 404, "not found")
+      end
     end
   end
 end
