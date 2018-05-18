@@ -3,9 +3,5 @@ defmodule YourApp.Router do
 
   get "/cats", YourApp.Controller, :index
   get "/cats/felix", YourApp.Controller, :show
-
-  # post "/cats"
-  def do_match(conn, "POST", ["cats"]) do
-    YourApp.Controller.create(conn)
-  end
+  post "/cats", YourApp.Controller, :create
 end
