@@ -156,4 +156,67 @@ That's about it for the endpoint, but as you can see from the request we sent ou
 
 ## The Router
 
-//
+You have a web app! Pretty exciting, but chances are your app is more complicated than what can be done with a single function. You will want to be able to model different pages and resources using the request path. This is web app 101, and Phoenix solves this problem by _routing_ requests to different functions handy for constructing responses. That's the purpose of the Router. Receive a request, and based on its details like the HTTP verb and path, figure out which function should handle buliding a response.
+
+Just like the endpoint, the router is a _function pipeline_ (seeing a theme?) Functions can be _plugged_ in router to handle shared concerns like authentication and content type negotiation.
+
+Start by making your router a pipeline with Plug.Builder and define a few routes to _match_ on.
+
+```elixir
+defmodule YourApp.Router do
+  use Plug.Builder
+  plug(:match)
+  
+  def match(conn, _opts) do
+    do_match(conn, conn.method, conn.path_info)
+  end
+  
+  # GET /cats
+  def do_match(conn, "GET", ["cats"]) do
+    Plug.Conn.send_resp(conn, 200, "meows")
+  end
+  
+  # GET /cats/felix
+  def do_match(conn, "GET", ["cats", "felix"]) do
+    Plug.Conn.send_resp(conn, 200, "just meow")
+  end
+end
+```
+
+Now plug your router into your endpoint and let's route some requests!
+
+```diff
+ # your_app/endpoint.ex
+ defmodule YourApp.Endpoint do
+   def start_link do
+     options = []
+     Plug.Adapters.Cowboy2.http(__MODULE__, options)
+   end
+ 
+   use Plug.Builder
+  
+-  plug(:hello)
+-  plug(:world)
+- 
+-  def hello(conn, _opts) do
+-    Plug.Conn.put_private(conn, :name, "world")
+-  end
+- 
+-  def world(conn, _opts) do
+-    Plug.Conn.send_resp(conn, 200, "hello #{conn.private.name}")
+-  end
++  plug(YourApp.Router)
+ end 
+```
+
+```sh
+$ curl http://localhost:4000/cats
+meows
+$ curl http://localhost:4000/cats/felix
+just meow
+```
+
+Looking good! But you probably recognize that this isn't looking much like a Phoenix application. For one, you never have to write your own matching functions like this. Phoenix provides a DSL. We'll get to that shortly, but for now let's talk about _controllers_.
+
+## The Controller
+
