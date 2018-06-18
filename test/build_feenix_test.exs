@@ -2,7 +2,7 @@ defmodule BuildFeenixTest do
   use ExUnit.Case
   doctest BuildFeenix
 
-  test "the truth" do
-    assert 1 + 1 == 2
+  test "greets the world" do
+    assert BuildFeenix.hello() == :world
   end
 end
