@@ -866,3 +866,19 @@ And with one last pass, you might as well extend the DSL to support all the HTTP
  end
 ```
 
+## Summary
+
+So how many lines of framework code did we write?
+
+```
+» git diff master --numstat | grep feenix | cut -f1 | paste -sd+ - | bc
+77
+```
+```
+» git diff master --stat -- lib/feenix
+lib/feenix/controller.ex | 27 ++++++++++++++++++++++++++-
+lib/feenix/endpoint.ex   | 12 +++++++++++-
+lib/feenix/router.ex     | 41 ++++++++++++++++++++++++++++++++++++++++-
+3 files changed, 77 insertions(+), 3 deletions(-)
+```
+
