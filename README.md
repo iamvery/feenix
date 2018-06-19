@@ -57,14 +57,14 @@ created Garfield!
 
 So where's the function pipeline? If you know anything about Plug, that's a strong hint. The whole idea behind Plug is creating function pipelines, _plugs_. If you're familiar with Ruby, you can sort of think of Plug as the Elixir equivalent of Ruby's Rack, which is itself a function pipeline.
 
-You can sort of see how the router is _plugged_ into the the endpoint, and it sort of seems to delegate to the controller for certain requests. But routers are very declarative. How does that work? In a word, metaprogramming. Phoenix uses Elixir's rich metaprogramming model to surface a simple DSL for _declaring_ routes so that you don't to fool with the pattern-matching underpinnings of its implementation.
+You can sort of see how the router is _plugged_ into the endpoint, and it sort of seems to delegate to the controller for certain requests. But routers are very declarative. How does that work? In a word, metaprogramming. Phoenix uses Elixir's rich metaprogramming model to surface a simple DSL for _declaring_ routes so that you don't to fool with the pattern-matching underpinnings of its implementation.
 
 ### The Endpoint
 
 The entry point for a request in a Phoenix app is the _endpoint_. That's it, the first step. What purpose does an endpoint serve? Let me name them:
 
 1. It sets up the Elixir web server to handle requests.
-2. It preprocesses the request in various ways. Rubiests think: Rack middleware. This includes things like handling static assets, implementing HTTP method override, and logging requests. (take a peek at the generated endpoint.ex in your Phoenix projects)
+2. It preprocesses the request in various ways. Rubyists think: Rack middleware. This includes things like handling static assets, implementing HTTP method override, and logging requests. (take a peek at the generated endpoint.ex in your Phoenix projects)
 3. It hands off (pipes) the request to your router!
 
 Start simple, make your app's endpoint a pipeline using [`Plug.Builder`](https://hexdocs.pm/plug/Plug.Builder.html).
@@ -89,7 +89,7 @@ defmodule YourApp.Endpoint do
 end
 ```
 
-Now you can pipe a connection through your endpont!
+Now you can pipe a connection through your endpoint!
 
 ```
 iex(1)> YourApp.Endpoint.call(%Plug.Conn{}, nil)
@@ -262,7 +262,7 @@ end
  end
 ```
 
-This is a good start, but there's an important piece missing. Controller are also function pipelines, so we need to make our controller pluggable. This allows you do to things on the connection before your controller actions run. The problem, however, is that specific actions themselves are not plugs. They can't be, because you only want to run the _requested_ actions. To pull this off, you must generalize a way to determine which action was meant and apply that function dynamically with a plug.
+This is a good start, but there's an important piece missing. Controllers are also function pipelines, so we need to make our controller pluggable. This allows you do to things on the connection before your controller actions run. The problem, however, is that specific actions themselves are not plugs. They can't be, because you only want to run the _requested_ actions. To pull this off, you must generalize a way to determine which action was meant and apply that function dynamically with a plug.
 
 ```diff
  # your_app/controller.ex
@@ -316,18 +316,18 @@ This is a good start, but there's an important piece missing. Controller are als
  end
 ```
 
-Great, now you can isolate response-building logic in controllers. Running the requested action required a bit of dance, and to build it you really had to get down into the nitty gritty on how requests are routed to controller actions. This is perhaps the most agregious example so far, and it seems like it's about time we start abstracting some framework logic to get these details out of users' faces. Let's starting building Feenix!
+Great, now you can isolate response-building logic in controllers. Running the requested action required a bit of dance, and to build it you really had to get down into the nitty gritty on how requests are routed to controller actions. This is perhaps the most egregious example so far, and it seems like it's about time we start abstracting some framework logic to get these details out of users' faces. Let's starting building Feenix!
 
 ## Generating Framework Logic
 
-The "magic" of Phoenix is how it uses Elixir metaprogramming to abstract away the details of how it handles requests and exposing clean concepts for building applications. You just saw how complicated things got as you introduced controllers to your app. Start moving logic to the framework to hide these details.
+The "magic" of Phoenix is how it uses Elixir metaprogramming to abstract away the details of how it handles requests and exposing clean abstractions for building applications. You just saw how complicated things got as you introduced controllers to your app. Start moving logic to the framework to hide these details.
 
 ### The Controller
 
-Controllers in Phoenix don't look much like what we've built so far, they're mostly just modules with functions. By using Elixir's extension mechanims, `use`, we can extract the controller implementation details to a macro to pass the responsibility on to the framework.
+Controllers in Phoenix don't look much like what we've built so far, they're mostly just modules with functions. By using Elixir's extension mechanisms, `use`, we can extract the controller implementation details to a macro to pass the responsibility on to the framework.
 
 ```diff
-# your_app/controller.ex
+ # your_app/controller.ex
  defmodule YourApp.Controller do
 -  import Plug.Conn
 -
@@ -467,7 +467,7 @@ Now that your controllers are looking great, it's time to circle back and attack
 
 You'll recall that we ended up with a pretty reasonable endpoint implementation, but it leaks some details about the webserver setup that you can easily get it out of users' faces with a macro.
 
-```Diff
+```diff
  # your_app/endpoint.ex
  defmodule YourApp.Endpoint do
 -  def start_link do
@@ -622,7 +622,30 @@ To support other HTTP verbs, like `POST`, you'll need to generalization the impl
  end
 ```
 
+```diff
+ # your_app/controller.ex
+ defmodule YourApp.Controller do
+   use Feenix.Controller
 
+   plug(:assign_kitty_count)
+
+   def index(conn) do
+     Plug.Conn.send_resp(conn, 200, "#{conn.assigns.count} meows")
+   end
+
+   def show(conn) do
+     Plug.Conn.send_resp(conn, 200, "just meow")
+   end
+
++  def create(conn) do
++    Plug.Conn.send_resp(conn, 201, "created!")
++  end
++
+   def assign_kitty_count(conn, _opts) do
+     assign(conn, :count, 42)
+   end
+ end
+```
 
 ```diff
  # feenix/router.ex
@@ -710,6 +733,135 @@ And with one last pass, you might as well extend the DSL to support all the HTTP
          unquote(module).call(conn, unquote(function))
        end
      end
+   end
+ end
+```
+
+### Bonus: Logging
+
+```diff
+ # feenix/endpoint.ex
+ defmodule Feenix.Endpoint do
+   defmacro __using__(_opts) do
+     quote do
+       def start_link do
+         options = []
+         Plug.Adapters.Cowboy2.http(__MODULE__, options)
+       end
+
+       use Plug.Builder
++      plug(Plug.Logger)
+     end
+   end
+ end
+```
+
+### Bonus: 404
+
+```diff
+ # feenix/router.ex
+ defmodule Feenix.Router do
+   defmacro __using__(_opts) do
+     quote do
+       @before_compile unquote(__MODULE__)
+       import unquote(__MODULE__)
+       use Plug.Builder
+
+       def match(conn, _opts) do
+         do_match(conn, conn.method, conn.path_info)
+       end
++
++      def do_match(conn, _method, _path_info) do
++        Plug.Conn.send_resp(conn, 404, "not found")
++      end
+     end
+   end
+
+   defmacro __before_compile__(_env) do
+     quote do
+       plug(:match)
+     end
+   end
+
+   for method <- [:get, :post, :put, :patch, :delete] do
+     defmacro unquote(method)(path, module, function) do
+       method = Plug.Router.Utils.normalize_method(unquote(method))
+       build(method, path, module, function)
+     end
+   end
+
+   def build(method, path, module, function)
+     {_vars, path_info} = Plug.Router.Utils.build_path_match(path)
+
+     quote do
+       def do_match(conn, unquote(method), unquote(path_info)) do
+         unquote(module).call(conn, unquote(function))
+       end
+     end
+   end
+ end
+```
+
+### Bonus: Parameters
+
+```diff
+ # feenix/controller.ex
+ defmodule Feenix.Controller do
+   defmacro __using__(_opts) do
+     quote do
+       @before_compile unquote(__MODULE__)
+
+       import Plug.Conn
+
+       use Plug.Builder
++      plug(:fetch_query_params)
+
+       def call(conn, action) do
+         conn
+         |> put_private(:action, action)
+         |> super(nil)
+       end
+
+       def apply_action(conn, _opts) do
+-        apply(__MODULE__, conn.private.action, [conn])
++        apply(__MODULE__, conn.private.action, [conn, conn.params])
+       end
+     end
+   end
+
+   defmacro __before_compile__(_env) do
+     quote do
+       plug(:apply_action)
+     end
+   end
+ end
+```
+
+```diff
+ # your_app/controller.ex
+ defmodule YourApp.Controller do
+   use Feenix.Controller
+
+   plug(:assign_kitty_count)
+
+-  def index(conn) do
++  def index(conn, _params) do
+     Plug.Conn.send_resp(conn, 200, "#{conn.assigns.count} meows")
+   end
+
+-  def show(conn) do
++  def show(conn, _params) do
+     Plug.Conn.send_resp(conn, 200, "just meow")
+   end
+
+-  def create(conn) do
+-    Plug.Conn.send_resp(conn, 201, "created!")
++  def create(conn, %{"name" => name}) do
++    Plug.Conn.send_resp(conn, 201, "created #{name}!")
+   end
+
+   def assign_kitty_count(conn, _opts) do
+     assign(conn, :count, 42)
    end
  end
 ```
