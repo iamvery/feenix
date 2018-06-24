@@ -179,41 +179,20 @@ You might have noticed that there is no output in the `iex` window. Our server d
  end
 ```
 
+Now you'll get a little feedback from your Elixir process.
+
+```
+16:43:17.800 [info]  GET /cats
+16:43:17.800 [info]  Sent 200 in 19µs
+```
+
 That's about it for the endpoint, but as you can see from the request we sent our app, there is no concept of request path or routing happening. Enter the router...
 
 ### The Router
 
 You have a web app! Pretty exciting, but chances are your app is more complicated than what can be done with a single function. You will want to be able to model different pages and resources using the request path. This is web app 101, and Phoenix solves this problem by _routing_ requests to different functions handy for constructing responses. That's the purpose of the Router. Receive a request, and based on its details like the HTTP verb and path, figure out which function should handle buliding a response.
 
-Just like the endpoint, the router is a _function pipeline_ (seeing a theme?) Functions can be _plugged_ in router to handle shared concerns like authentication and content type negotiation.
-
-Start by making your router a pipeline with `Plug.Builder` and define a few routes to _match_ on.
-
-```elixir
-# your_app/router.ex
-defmodule YourApp.Router do
-  use Plug.Builder
-  plug(:match)
-
-  def match(conn, _opts) do
-    do_match(conn, conn.method, conn.path_info)
-  end
-
-  # GET /cats
-  def do_match(conn, "GET", ["cats"]) do
-    send_resp(conn, 200, "meows")
-  end
-
-  # GET /cats/felix
-  def do_match(conn, "GET", ["cats", "felix"]) do
-    send_resp(conn, 200, "just meow")
-  end
-end
-```
-
-Most of the "magic" comes from Plug. You can see that a `%Plug.Conn{}` has a `path_info` property. The value of this property is a data structure that plug parses the request path into.
-
-Now plug your router into your endpoint and let's route some requests!
+Plug your router into your endpoint.
 
 ```diff
  # your_app/endpoint.ex
@@ -239,6 +218,41 @@ Now plug your router into your endpoint and let's route some requests!
  end
 ```
 
+Just like the endpoint, the router is a _function pipeline_ (seeing a theme?) Functions can be _plugged_ in router to handle shared concerns like authentication and content type negotiation.
+
+Start by making your router a pipeline with `Plug.Builder` and define a few routes to _match_ on.
+
+```elixir
+# your_app/router.ex
+defmodule YourApp.Router do
+  use Plug.Builder
+  plug(:match)
+
+  def match(conn, _opts) do
+    do_match(conn, conn.method, conn.path_info)
+  end
+
+  # get "/cats"
+  def do_match(conn, "GET", ["cats"]) do
+    send_resp(conn, 200, "meows")
+  end
+
+  # get "/cats/felix"
+  def do_match(conn, "GET", ["cats", "felix"]) do
+    send_resp(conn, 200, "just meow")
+  end
+
+  # post "/cats"
+  def do_match(conn, "POST", ["cats"]) do
+    send_resp(conn, 201, "meow!")
+  end
+end
+```
+
+Most of the "magic" comes from Plug. You can see that a `%Plug.Conn{}` has a `path_info` property. The value of this property is a data structure that plug parses the request path into. Pattern matching is a great fit for function dispatch!
+
+Make some requests.
+
 ```sh
 $ curl http://localhost:4000/cats
 meows
@@ -250,22 +264,7 @@ Looking good! But you probably recognize that this isn't looking much like a Pho
 
 ### The Controller
 
-It would be unwhieldy define the behavior of every route in the router. Controllers give you a mechanism of collecting related functions into modules as destinations for routed requests. Continue to iterate on you app by extracting response-building logic to a controller.
-
-```elixir
-# your_app/controller.ex
-defmodule YourApp.Controller do
-  import Plug.Conn
-
-  def index(conn) do
-    Plug.Conn.send_resp(conn, 200, "meows")
-  end
-
-  def show(conn) do
-    Plug.Conn.send_resp(conn, 200, "just meow")
-  end
-end
-```
+It would be unwhieldy define the behavior of every route in the router. Controllers give you a mechanism of collecting related functions into modules as destinations for routed requests. Continue to iterate on you app by extracting response-building logic to a controller. Your router should call your controller.
 
 ```diff
  # your_app/router.ex
@@ -277,27 +276,83 @@ end
      do_match(conn, conn.method, conn.path_info)
    end
 
-   # GET /cats
+   # get "/cats"
    def do_match(conn, "GET", ["cats"]) do
 -    send_resp(conn, 200, "meows")
 +    YourApp.Controller.index(conn)
    end
 
-   # GET /cats/felix
+   # get "/cats/felix"
    def do_match(conn, "GET", ["cats", "felix"]) do
 -   send_resp(conn, 200, "just meow")
 +    YourApp.Controller.show(conn)
    end
+
+   # post "/cats"
+   def do_match(conn, "POST", ["cats"]) do
+-    send_resp(conn, 201, "meow!")
++    YourApp.Controller.create(conn)
+   end
  end
+```
+
+And then define the controller actions.
+
+```elixir
+# your_app/controller.ex
+defmodule YourApp.Controller do
+  import Plug.Conn
+
+  def index(conn) do
+    send_resp(conn, 200, "meows")
+  end
+
+  def show(conn) do
+    send_resp(conn, 200, "just meow")
+  end
+
+  def create(conn) do
+    send_resp(conn, 201, "meow!")
+  end
+end
 ```
 
 This is a good start, but there's an important piece missing. Controllers are also function pipelines, so we need to make our controller pluggable. This allows you do to things on the connection before your controller actions run. The problem, however, is that specific actions themselves are not plugs. They can't be, because you only want to run the _requested_ actions. To pull this off, you must generalize a way to determine which action was meant and apply that function dynamically with a plug.
 
 ```diff
+ # your_app/router.ex
+ defmodule YourApp.Router do
+   use Plug.Builder
+   plug(:match)
+
+   def match(conn, _opts) do
+     do_match(conn, conn.method, conn.path_info)
+   end
+
+   # get "/cats"
+   def do_match(conn, "GET", ["cats"]) do
+-    YourApp.Controller.index(conn)
++    YourApp.Controller.call(conn, :index)
+   end
+
+   # get "/cats/felix"
+   def do_match(conn, "GET", ["cats", "felix"]) do
+-    YourApp.Controller.show(conn)
++    YourApp.Controller.call(conn, :show)
+   end
+
+   # post "/cats"
+   def do_match(conn, "POST", ["cats"]) do
+-    YourApp.Controller.create(conn)
++    YourApp.Controller.call(conn, :create)
+   end
+ end
+```
+
+```diff
  # your_app/controller.ex
  defmodule YourApp.Controller do
-   import Plug.Conn
-
+-  import Plug.Conn
 +  use Plug.Builder
 +  plug(:apply_action)
 +
@@ -310,37 +365,17 @@ This is a good start, but there's an important piece missing. Controllers are al
 +  def apply_action(conn, _opts) do
 +    apply(__MODULE__, conn.private.action, [conn])
 +  end
-+
+
    def index(conn) do
-     Plug.Conn.send_resp(conn, 200, "meows")
+     send_resp(conn, 200, "meows")
    end
 
    def show(conn) do
-     Plug.Conn.send_resp(conn, 200, "just meow")
-   end
- end
-```
-
-```diff
- # your_app/router.ex
- defmodule YourApp.Router do
-   use Plug.Builder
-   plug(:match)
-
-   def match(conn, _opts) do
-     do_match(conn, conn.method, conn.path_info)
+     send_resp(conn, 200, "just meow")
    end
 
-   # GET /cats
-   def do_match(conn, "GET", ["cats"]) do
--    YourApp.Controller.index(conn)
-+    YourApp.Controller.call(conn, :index)
-   end
-
-   # GET /cats/felix
-   def do_match(conn, "GET", ["cats", "felix"]) do
--    YourApp.Controller.show(conn)
-+    YourApp.Controller.call(conn, :show)
+   def create(conn) do
+     send_resp(conn, 201, "meow!")
    end
  end
 ```
