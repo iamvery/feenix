@@ -9,7 +9,7 @@ defmodule YourApp.Controller do
   end
 
   def show(conn, _params) do
-    send_resp(conn, 200, "just meow")
+    send_resp(conn, 200, "#{conn.path_params["name"]} meow")
   end
 
   def create(conn, %{"name" => name}) do

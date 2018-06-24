@@ -7,10 +7,13 @@ defmodule Feenix.Router.DSL do
   end
 
   defp build(method, path, module, action) do
-    {_vars, path_info} = Plug.Router.Utils.build_path_match(path)
+    {vars, path_info} = Plug.Router.Utils.build_path_match(path)
+    path_params = Plug.Router.Utils.build_path_params_match(vars)
 
     quote do
       def do_match(conn, unquote(method), unquote(path_info)) do
+        path_params = unquote({:%{}, [], path_params})
+        conn = update_in(conn.path_params, &Map.merge(&1, path_params))
         unquote(module).call(conn, unquote(action))
       end
     end
