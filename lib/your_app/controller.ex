@@ -1,7 +1,7 @@
 defmodule YourApp.Controller do
   use Feenix.Controller
 
-  plug(:fetch_query_params)
+  plug(Feenix.Params)
   plug(:assigns_kitty_count)
 
   def index(conn, _params) do
