@@ -7,7 +7,7 @@ Here's an example of a basic Phoenix application:
 ```elixir
 # endpoint.ex
 defmodule YourApp.Endpoint do
-  use Phoenix.Endpoint, otp_app: :your_app
+  use Phoenix.Endpoint, ...
 
   # various plugs
   plug(YourApp.Router)
@@ -17,7 +17,8 @@ end
 ```elixir
 # router.ex
 defmodule YourApp.Router do
-  use YourAppWeb, :router
+  use Phoenix.Router
+  ...
 
   get "/cats", YourApp.Controller, :index
   get "/cats/felix", YourApp.Controller, :show
@@ -28,7 +29,7 @@ end
 ```elixir
 # controller.ex
 defmodule YourApp.Controller do
-  use YourAppWeb, :controller
+  use Phoenix.Controller, ...
 
   def index(conn, _params) do
     send_resp(conn, 200, "meows")
@@ -57,7 +58,7 @@ created Garfield!
 
 So where's the function pipeline? If you know anything about Plug, that's a strong hint. The whole idea behind Plug is creating function pipelines, _plugs_. If you're familiar with Ruby, you can sort of think of Plug as the Elixir equivalent of Ruby's Rack, which is itself a function pipeline.
 
-You can sort of see how the router is _plugged_ into the endpoint, and it sort of seems to delegate to the controller for certain requests. But routers are very declarative. How does that work? In a word, metaprogramming. Phoenix uses Elixir's rich metaprogramming model to surface a simple DSL for _declaring_ routes so that you don't to fool with the pattern-matching underpinnings of its implementation.
+You can sort of see how the router is _plugged_ into the endpoint, and it sort of seems to delegate to the controller for certain requests. But routers are very declarative. How does that work? In a word, metaprogramming. Phoenix uses Elixir's rich metaprogramming model to surface a simple DSL for _declaring_ routes so that you don't have to fool with the pattern-matching underpinnings of its implementation.
 
 ### The Endpoint
 
@@ -116,13 +117,13 @@ Cool! That sets up most of #2, but the endpoint still needs to handle the web re
    def hello(conn, _opts) do
 -    IO.puts("hello")
 -    conn
-+    Plug.Conn.put_private(conn, :name, "world")
++    put_private(conn, :name, "world")
    end
 
    def world(conn, _opts) do
 -    IO.puts("world")
 -    conn
-+    Plug.Conn.send_resp(conn, 200, "hello #{conn.private.name}")
++    send_resp(conn, 200, "hello #{conn.private.name}")
    end
  end
 ```
@@ -152,6 +153,32 @@ $ curl http://localhost:4000/does/not/matter/because/no/routing/is/implemented
 hello world
 ```
 
+You might have noticed that there is no output in the `iex` window. Our server doesn't produce any logs by default. This can be really helpful for debugging, and the solution is easy enough.
+
+```diff
+ # your_app/endpoint.ex
+ defmodule YourApp.Endpoint do
+   def start_link do
+     options = []
+     Plug.Adapters.Cowboy2.http(__MODULE__, options)
+   end
+
+   use Plug.Builder
+
++  plug(Plug.Logger)
+   plug(:hello)
+   plug(:world)
+
+   def hello(conn, _opts) do
+     put_private(conn, :name, "world")
+   end
+
+   def world(conn, _opts) do
+     send_resp(conn, 200, "hello #{conn.private.name}")
+   end
+ end
+```
+
 That's about it for the endpoint, but as you can see from the request we sent our app, there is no concept of request path or routing happening. Enter the router...
 
 ### The Router
@@ -160,7 +187,7 @@ You have a web app! Pretty exciting, but chances are your app is more complicate
 
 Just like the endpoint, the router is a _function pipeline_ (seeing a theme?) Functions can be _plugged_ in router to handle shared concerns like authentication and content type negotiation.
 
-Start by making your router a pipeline with Plug.Builder and define a few routes to _match_ on.
+Start by making your router a pipeline with `Plug.Builder` and define a few routes to _match_ on.
 
 ```elixir
 # your_app/router.ex
@@ -174,15 +201,17 @@ defmodule YourApp.Router do
 
   # GET /cats
   def do_match(conn, "GET", ["cats"]) do
-    Plug.Conn.send_resp(conn, 200, "meows")
+    send_resp(conn, 200, "meows")
   end
 
   # GET /cats/felix
   def do_match(conn, "GET", ["cats", "felix"]) do
-    Plug.Conn.send_resp(conn, 200, "just meow")
+    send_resp(conn, 200, "just meow")
   end
 end
 ```
+
+Most of the "magic" comes from Plug. You can see that a `%Plug.Conn{}` has a `path_info` property. The value of this property is a data structure that plug parses the request path into.
 
 Now plug your router into your endpoint and let's route some requests!
 
@@ -200,11 +229,11 @@ Now plug your router into your endpoint and let's route some requests!
 -  plug(:world)
 -
 -  def hello(conn, _opts) do
--    Plug.Conn.put_private(conn, :name, "world")
+-    put_private(conn, :name, "world")
 -  end
 -
 -  def world(conn, _opts) do
--    Plug.Conn.send_resp(conn, 200, "hello #{conn.private.name}")
+-    send_resp(conn, 200, "hello #{conn.private.name}")
 -  end
 +  plug(YourApp.Router)
  end
@@ -250,13 +279,13 @@ end
 
    # GET /cats
    def do_match(conn, "GET", ["cats"]) do
--    Plug.Conn.send_resp(conn, 200, "meows")
+-    send_resp(conn, 200, "meows")
 +    YourApp.Controller.index(conn)
    end
 
    # GET /cats/felix
    def do_match(conn, "GET", ["cats", "felix"]) do
--   Plug.Conn.send_resp(conn, 200, "just meow")
+-   send_resp(conn, 200, "just meow")
 +    YourApp.Controller.show(conn)
    end
  end
