@@ -8,8 +8,8 @@ defmodule YourApp.Controller do
     send_resp(conn, 200, "#{conn.assigns.count} meows")
   end
 
-  def show(conn, _params) do
-    send_resp(conn, 200, "#{conn.path_params["name"]} meow")
+  def show(conn, %{"name" => name}) do
+    send_resp(conn, 200, "#{name} meow")
   end
 
   def create(conn, %{"name" => name}) do
