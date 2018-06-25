@@ -410,11 +410,15 @@ Controllers in Phoenix don't look much like what we've built so far, they're mos
 +  use Feenix.Controller
 
    def index(conn) do
-     Plug.Conn.send_resp(conn, 200, "meows")
+     send_resp(conn, 200, "meows")
    end
 
    def show(conn) do
-     Plug.Conn.send_resp(conn, 200, "just meow")
+     send_resp(conn, 200, "just meow")
+   end
+
+   def create(conn) do
+     send_resp(conn, 201, "meow!")
    end
  end
 ```
@@ -459,6 +463,10 @@ Cool, that's look much more like a Phoenix controller. But it does introduce a p
 
    def show(conn) do
      Plug.Conn.send_resp(conn, 200, "just meow")
+   end
+
+   def create(conn) do
+     send_resp(conn, 201, "meow!")
    end
 +
 +  defp assign_kitty_count(conn, _opts) do
@@ -581,14 +589,19 @@ Ease into this effort by just abstracting the static parts of the router abstrac
 -  end
 +  use Feenix.Router
 
-   # GET /cats
+   # get "/cats"
    def do_match(conn, "GET", ["cats"]) do
      YourApp.Controller.call(conn, :index)
    end
 
-   # GET /cats/felix
+   # get "/cats/felix"
    def do_match(conn, "GET", ["cats", "felix"]) do
      YourApp.Controller.call(conn, :show)
+   end
+
+   # post "/cats"
+   def do_match(conn, "POST" ["cats"]) do
+     YourApp.Controller.call(conn, :create)
    end
  end
 ```
@@ -624,21 +637,26 @@ You've pulled all the static behavior you can out into framework code, but your 
  defmodule YourApp.Router do
    use Feenix.Router
 
--  # GET /cats
+-  # get "/cats"
 -  def do_match(conn, "GET", ["cats"]) do
 -    YourApp.Controller.call(conn, :index)
 -  end
 -
--  # GET /cats/felix
+-  # get "/cats/felix"
 -  def do_match(conn, "GET", ["cats", "felix"]) do
 -    YourApp.Controller.call(conn, :show)
 -  end
 +  get "/cats", YourApp.Controller, :index
 +  get "/cats/felix", YourApp.Controller, :show
+
+   # post "/cats"
+   def do_match(conn, "POST" ["cats"]) do
+     YourApp.Controller.call(conn, :create)
+   end
  end
 ```
 
-To make this a reality, you will need to add a new macro to the framework router that generates the match function.
+To make this a reality, you will need to import a new DSL macro in the router that generates the match function.
 
 ```diff
  # feenix/router.ex
@@ -646,7 +664,7 @@ To make this a reality, you will need to add a new macro to the framework router
    defmacro __using__(_opts) do
      quote do
        @before_compile unquote(__MODULE__)
-+      import unquote(__MODULE__)
++      import unquote(__MODULE__).DSL
        use Plug.Builder
 
        def match(conn, _opts) do
@@ -660,17 +678,22 @@ To make this a reality, you will need to add a new macro to the framework router
        plug(:match)
      end
    end
-+
-+  defmacro get(path, module, function) do
-+    {_vars, path_info} = Plug.Router.Utils.build_path_match(path)
-+
-+    quote do
-+      def do_match(conn, "GET", unquote(path_info)) do
-+        unquote(module).call(conn, unquote(function))
-+      end
-+    end
-+  end
  end
+```
+
+```elixir
+# feenix/router/dsl.ex
+defmodule Feenix.Router.DSL do
+  defmacro get(path, module, function) do
+    {_vars, path_info} = Plug.Router.Utils.build_path_match(path)
+
+    quote do
+      def do_match(conn, "GET", unquote(path_info)) do
+        unquote(module).call(conn, unquote(function))
+      end
+    end
+  end
+end
 ```
 
 To support other HTTP verbs, like `POST`, you'll need to generalization the implementation just a little bit.
@@ -682,56 +705,18 @@ To support other HTTP verbs, like `POST`, you'll need to generalization the impl
 
    get "/cats", YourApp.Controller, :index
    get "/cats/felix", YourApp.Controller, :show
+-
+-  # post "/cats"
+-  def do_match(conn, "POST" ["cats"]) do
+-    YourApp.Controller.call(conn, :create)
+-  end
 +  post "/cats", YourApp.Controller, :create
  end
 ```
 
 ```diff
- # your_app/controller.ex
- defmodule YourApp.Controller do
-   use Feenix.Controller
-
-   plug(:assign_kitty_count)
-
-   def index(conn) do
-     Plug.Conn.send_resp(conn, 200, "#{conn.assigns.count} meows")
-   end
-
-   def show(conn) do
-     Plug.Conn.send_resp(conn, 200, "just meow")
-   end
-
-+  def create(conn) do
-+    Plug.Conn.send_resp(conn, 201, "created!")
-+  end
-+
-   def assign_kitty_count(conn, _opts) do
-     assign(conn, :count, 42)
-   end
- end
-```
-
-```diff
- # feenix/router.ex
- defmodule Feenix.Router do
-   defmacro __using__(_opts) do
-     quote do
-       @before_compile unquote(__MODULE__)
-       import unquote(__MODULE__)
-       use Plug.Builder
-
-       def match(conn, _opts) do
-         do_match(conn, conn.method, conn.path_info)
-       end
-     end
-   end
-
-   defmacro __before_compile__(_env) do
-     quote do
-       plug(:match)
-     end
-   end
-
+ # feenix/router/dsl.ex
+ defmodule Feenix.Router.DSL do
    defmacro get(path, module, function) do
 +    build("GET", path, module, function)
 +  end
@@ -756,26 +741,8 @@ To support other HTTP verbs, like `POST`, you'll need to generalization the impl
 And with one last pass, you might as well extend the DSL to support all the HTTP verbs with one more touch of metaprogramming.
 
 ```diff
- # feenix/router.ex
- defmodule Feenix.Router do
-   defmacro __using__(_opts) do
-     quote do
-       @before_compile unquote(__MODULE__)
-       import unquote(__MODULE__)
-       use Plug.Builder
-
-       def match(conn, _opts) do
-         do_match(conn, conn.method, conn.path_info)
-       end
-     end
-   end
-
-   defmacro __before_compile__(_env) do
-     quote do
-       plug(:match)
-     end
-   end
-
+  # feenix/router/dsl.ex
+ defmodule Feenix.Router.DSL do
 -  defmacro get(path, module, function) do
 -    build("GET", path, module, function)
 -  end
@@ -796,25 +763,6 @@ And with one last pass, you might as well extend the DSL to support all the HTTP
        def do_match(conn, unquote(method), unquote(path_info)) do
          unquote(module).call(conn, unquote(function))
        end
-     end
-   end
- end
-```
-
-### Bonus: Logging
-
-```diff
- # feenix/endpoint.ex
- defmodule Feenix.Endpoint do
-   defmacro __using__(_opts) do
-     quote do
-       def start_link do
-         options = []
-         Plug.Adapters.Cowboy2.http(__MODULE__, options)
-       end
-
-       use Plug.Builder
-+      plug(Plug.Logger)
      end
    end
  end
@@ -910,18 +858,135 @@ And with one last pass, you might as well extend the DSL to support all the HTTP
 
 -  def index(conn) do
 +  def index(conn, _params) do
-     Plug.Conn.send_resp(conn, 200, "#{conn.assigns.count} meows")
+     send_resp(conn, 200, "#{conn.assigns.count} meows")
    end
 
 -  def show(conn) do
 +  def show(conn, _params) do
-     Plug.Conn.send_resp(conn, 200, "just meow")
+     send_resp(conn, 200, "just meow")
    end
 
 -  def create(conn) do
 -    Plug.Conn.send_resp(conn, 201, "created!")
 +  def create(conn, %{"name" => name}) do
-+    Plug.Conn.send_resp(conn, 201, "created #{name}!")
++    send_resp(conn, 201, "created #{name}!")
+   end
+
+   def assign_kitty_count(conn, _opts) do
+     assign(conn, :count, 42)
+   end
+ end
+```
+
+### Bonus: Path Parameters
+
+```diff
+ # your_app/router.ex
+ defmodule YourApp.Router do
+   use Feenix.Router
+
+   get "/cats", YourApp.Controller, :index
+-  get "/cats/felix", YourApp.Controller, :show
++  get "/cats/:name", YourApp.Controller, :show
+   post "/cats", YourApp.Controller, :create
+ end
+```
+
+```diff
+ # feenix/router/dsl.ex
+ defmodule Feenix.Router.DSL do
+   defmacro get(path, module, function) do
+     build("GET", path, module, function)
+   end
+
+   defmacro post(path, module, function) do
+     build("POST", path, module, function)
+   end
+
+   def build(method, path, module, function)
+-    {_vars, path_info} = Plug.Router.Utils.build_path_match(path)
++    {vars, path_info} = Plug.Router.Utils.build_path_match(path)
++    path_params = Plug.Router.Utils.build_path_params_match(vars)
+
+     quote do
+       def do_match(conn, unquote(method), unquote(path_info)) do
++        path_params = unquote({:%{}, [], path_params})
++        conn = update_in(conn.path_params, &Map.merge(&1, path_params))
+         unquote(module).call(conn, unquote(function))
+       end
+     end
+   end
+ end
+```
+
+```diff
+ # feenix/controller.ex
+ defmodule Feenix.Controller do
+   defmacro __using__(_opts) do
+     quote do
+       @before_compile unquote(__MODULE__)
+
+       import Plug.Conn
+
+       use Plug.Builder
+-      plug(:fetch_query_params)
++      plug(Feenix.Controller.Params)
+
+       def call(conn, action) do
+         conn
+         |> put_private(:action, action)
+         |> super(nil)
+       end
+
+       def apply_action(conn, _opts) do
+         apply(__MODULE__, conn.private.action, [conn, conn.params])
+       end
+     end
+   end
+
+   defmacro __before_compile__(_env) do
+     quote do
+       plug(:apply_action)
+     end
+   end
+ end
+```
+
+```elixir
+# feenix/controller/params.ex
+defmodule Feenix.Controller.Params do
+  use Plug.Builder
+
+  plug(:fetch_query_parameters)
+  plug(:merge_params)
+
+  def merge_params(conn, _opts) do
+    %{params: params, path_params: path_params} = conn
+    merged_params = Map.merge(params, path_params)
+    %{conn | params: merged_params}
+  end
+end
+```
+
+```diff
+ # your_app/controller.ex
+ defmodule YourApp.Controller do
+   use Feenix.Controller
+
+   plug(:assign_kitty_count)
+
+   def index(conn, _params) do
+     send_resp(conn, 200, "#{conn.assigns.count} meows")
+   end
+
+-  def show(conn, _params) do
+-    send_resp(conn, 200, "just meow")
++  def show(conn, %{"name" => name}) do
++    send_resp(conn, 200, "#{name} meow")
+   end
+
+   def create(conn, %{"name" => name}) do
+     send_resp(conn, 201, "created #{name}!")
    end
 
    def assign_kitty_count(conn, _opts) do
