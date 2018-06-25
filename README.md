@@ -317,7 +317,39 @@ defmodule YourApp.Controller do
 end
 ```
 
-This is a good start, but there's an important piece missing. Controllers are also function pipelines, so we need to make our controller pluggable. This allows you do to things on the connection before your controller actions run. The problem, however, is that specific actions themselves are not plugs. They can't be, because you only want to run the _requested_ actions. To pull this off, you must generalize a way to determine which action was meant and apply that function dynamically with a plug.
+This is a good start, but there's an important piece missing. Controllers are also function pipelines, so we need to make our controller pluggable. This allows you do to things on the connection before your controller actions run.
+
+To illustrate this problem, consider setting some data in a plug in your controller.
+
+```diff
+ # your_app/controller.ex
+ defmodule YourApp.Controller do
+   import Plug.Conn
+
++  plug(:assign_kitty_count)
+
+   def index(conn) do
+-    send_resp(conn, 200, "meows")
++    send_resp(conn, 200, "#{conn.assigns.count} meows")
+   end
+
+   def show(conn) do
+     send_resp(conn, 200, "just meow")
+   end
+
+   def create(conn) do
+     send_resp(conn, 201, "meow!")
+   end
++
++  defp assign_kitty_count(conn, _opts) do
++    assign(conn, :count, 42)
++  end
+ end
+```
+
+This fails immediately because the controller is not pluggable!
+
+This isn't as simple as making the controller pluggable. Specific actions themselves are not plugs. They can't be, because you only want to run the _requested_ actions. To pull this off, you must generalize a way to determine which action was meant and apply that function dynamically with a plug.
 
 ```diff
  # your_app/router.ex
@@ -353,14 +385,17 @@ This is a good start, but there's an important piece missing. Controllers are al
  # your_app/controller.ex
  defmodule YourApp.Controller do
 -  import Plug.Conn
+-
 +  use Plug.Builder
-+  plug(:apply_action)
 +
 +  def call(conn, action) do
 +    conn
 +    |> put_private(:action, action)
 +    |> super(nil)
 +  end
++
+   plug(:assign_kitty_count)
++  plug(:apply_action)
 +
 +  def apply_action(conn, _opts) do
 +    apply(__MODULE__, conn.private.action, [conn])
@@ -377,14 +412,58 @@ This is a good start, but there's an important piece missing. Controllers are al
    def create(conn) do
      send_resp(conn, 201, "meow!")
    end
+
+   defp assign_kitty_count(conn, _opts) do
+     assign(conn, :count, 42)
+   end
  end
 ```
 
-Great, now you can isolate response-building logic in controllers. Running the requested action required a bit of dance, and to build it you really had to get down into the nitty gritty on how requests are routed to controller actions. This is perhaps the most egregious example so far, and it seems like it's about time we start abstracting some framework logic to get these details out of users' faces. Let's starting building Feenix!
+Great, now you can isolate response-building logic in controllers. Running the requested action required a bit of dance, and to build it you really had to get down into the nitty gritty on how requests are routed to controller actions. It's also important to note that the _order_ of the plugs is very imporant here. The assign must happen _before_ the action is applied so that the data is available to build the response.
+
+This is perhaps the most egregious example so far, and it seems like it's about time we start abstracting some framework logic to get these details out of users' faces. Let's starting building Feenix!
 
 ## Generating Framework Logic
 
 The "magic" of Phoenix is how it uses Elixir metaprogramming to abstract away the details of how it handles requests and exposing clean abstractions for building applications. You just saw how complicated things got as you introduced controllers to your app. Start moving logic to the framework to hide these details.
+
+### The Endpoint
+
+You'll recall that we ended up with a pretty reasonable endpoint implementation, but it leaks some details about the webserver setup that you can easily get it out of users' faces with a macro.
+
+```diff
+ # your_app/endpoint.ex
+ defmodule YourApp.Endpoint do
+-  def start_link do
+-    options = []
+-    Plug.Adapters.Cowboy2.http(__MODULE__, options)
+-  end
+-
+-  use Plug.Builder
++  use Feenix.Endpoint
+
+   plug(Plug.Logger)
+   plug(YourApp.Router)
+ end
+```
+
+```elixir
+# feenix/endpoint.ex
+defmodule Feenix.Endpoint do
+  defmacro __using__(_opts) do
+    quote do
+      def start_link do
+        options = []
+        Plug.Adapters.Cowboy2.http(__MODULE__, options)
+      end
+
+      use Plug.Builder
+    end
+  end
+end
+```
+
+That looks much more like a Phoenix endpoint. The final offender is the router.
 
 ### The Controller
 
@@ -393,21 +472,21 @@ Controllers in Phoenix don't look much like what we've built so far, they're mos
 ```diff
  # your_app/controller.ex
  defmodule YourApp.Controller do
--  import Plug.Conn
--
 -  use Plug.Builder
--  plug(:apply_action)
 -
 -  def call(conn, action) do
 -    conn
 -    |> put_private(:action, action)
 -    |> super(nil)
 -  end
++  use Feenix.Controller
+
+   plug(:assign_kitty_count)
+-  plug(:apply_action)
 -
 -  def apply_action(conn, _opts) do
 -    apply(__MODULE__, conn.private.action, [conn])
 -  end
-+  use Feenix.Controller
 
    def index(conn) do
      send_resp(conn, 200, "meows")
@@ -420,6 +499,10 @@ Controllers in Phoenix don't look much like what we've built so far, they're mos
    def create(conn) do
      send_resp(conn, 201, "meow!")
    end
+
+   defp assign_kitty_count(conn, _opts) do
+     assign(conn, :count, 42)
+   end
  end
 ```
 
@@ -428,16 +511,15 @@ Controllers in Phoenix don't look much like what we've built so far, they're mos
 defmodule Feenix.Controller do
   defmacro __using__(_opts) do
     quote do
-      import Plug.Conn
-
       use Plug.Builder
-      plug(:apply_action)
 
       def call(conn, action) do
         conn
         |> put_private(:action, action)
         |> super(nil)
       end
+
+      plug(:apply_action)
 
       def apply_action(conn, _opts) do
         apply(__MODULE__, conn.private.action, [conn])
@@ -447,35 +529,9 @@ defmodule Feenix.Controller do
 end
 ```
 
-Cool, that's look much more like a Phoenix controller. But it does introduce a problem. You realized earlier that controllers are plugs, but this implementation doesn't give you an opportunity to plug anything before the action is applied. Try assigning some value on the connection.
+Cool, that's look much more like a Phoenix controller. But it does introduce a problem. The problem is the order that the plugs are being made. Now that the framework logic is generated by a single macro, the `:apply_action` plug is happening before our app's `:assign_kitty_count`.
 
-```diff
- # your_app/controller.ex
- defmodule YourApp.Controller do
-   use Feenix.Controller
-
-+  plug(:assign_kitty_count)
-
-   def index(conn) do
--    Plug.Conn.send_resp(conn, 200, "meows")
-+    Plug.Conn.send_resp(conn, 200, "#{conn.assigns.count} meows")
-   end
-
-   def show(conn) do
-     Plug.Conn.send_resp(conn, 200, "just meow")
-   end
-
-   def create(conn) do
-     send_resp(conn, 201, "meow!")
-   end
-+
-+  defp assign_kitty_count(conn, _opts) do
-+    assign(conn, :count, 42)
-+  end
- end
-```
-
-This seems reasonable, but when you test things out you can see the problem.
+When you test things out you can see the problem.
 
 ```sh
 $ curl http://localhost:4000/cats
@@ -500,17 +556,15 @@ Luckily Elixir has a mechanism for exactly this scenario in its `@before_compile
    defmacro __using__(_opts) do
      quote do
 +      @before_compile unquote(__MODULE__)
-+
-       import Plug.Conn
-
        use Plug.Builder
--      plug(:apply_action)
 
        def call(conn, action) do
          conn
          |> put_private(:action, action)
          |> super(nil)
        end
+-
+-      plug(:apply_action)
 
        def apply_action(conn, _opts) do
          apply(__MODULE__, conn.private.action, [conn])
@@ -534,43 +588,6 @@ $ curl http://localhost:4000/cats/
 ```
 
 Now that your controllers are looking great, it's time to circle back and attack the test of the app. The endpoint abstraction is pretty straight-forwards. Tackle that next.
-
-### The Endpoint
-
-You'll recall that we ended up with a pretty reasonable endpoint implementation, but it leaks some details about the webserver setup that you can easily get it out of users' faces with a macro.
-
-```diff
- # your_app/endpoint.ex
- defmodule YourApp.Endpoint do
--  def start_link do
--    options = []
--    Plug.Adapters.Cowboy2.http(__MODULE__, options)
--  end
--
--  use Plug.Builder
-+  use Feenix.Endpoint
-
-   plug(YourApp.Router)
- end
-```
-
-```elixir
-# feenix/endpoint.ex
-defmodule Feenix.Endpoint do
-  defmacro __using__(_opts) do
-    quote do
-      def start_link do
-        options = []
-        Plug.Adapters.Cowboy2.http(__MODULE__, options)
-      end
-
-      use Plug.Builder
-    end
-  end
-end
-```
-
-That looks much more like a Phoenix endpoint. The final offender is the router.
 
 ### The Router
 
@@ -664,8 +681,8 @@ To make this a reality, you will need to import a new DSL macro in the router th
    defmacro __using__(_opts) do
      quote do
        @before_compile unquote(__MODULE__)
-+      import unquote(__MODULE__).DSL
        use Plug.Builder
++      import Feenix.Router.DSL
 
        def match(conn, _opts) do
          do_match(conn, conn.method, conn.path_info)
@@ -776,45 +793,57 @@ And with one last pass, you might as well extend the DSL to support all the HTTP
    defmacro __using__(_opts) do
      quote do
        @before_compile unquote(__MODULE__)
-       import unquote(__MODULE__)
        use Plug.Builder
+       import Feenix.Router.DSL
 
        def match(conn, _opts) do
          do_match(conn, conn.method, conn.path_info)
        end
-+
-+      def do_match(conn, _method, _path_info) do
-+        Plug.Conn.send_resp(conn, 404, "not found")
-+      end
      end
    end
 
    defmacro __before_compile__(_env) do
      quote do
        plug(:match)
-     end
-   end
-
-   for method <- [:get, :post, :put, :patch, :delete] do
-     defmacro unquote(method)(path, module, function) do
-       method = Plug.Router.Utils.normalize_method(unquote(method))
-       build(method, path, module, function)
-     end
-   end
-
-   def build(method, path, module, function)
-     {_vars, path_info} = Plug.Router.Utils.build_path_match(path)
-
-     quote do
-       def do_match(conn, unquote(method), unquote(path_info)) do
-         unquote(module).call(conn, unquote(function))
-       end
++
++      def do_match(conn, _method, _path_info) do
++        send_resp(conn, 404, "not found")
++      end
      end
    end
  end
 ```
 
 ### Bonus: Parameters
+
+```diff
+ # your_app/controller.ex
+ defmodule YourApp.Controller do
+   use Feenix.Controller
+
+   plug(:assign_kitty_count)
+
+-  def index(conn) do
++  def index(conn, _params) do
+     send_resp(conn, 200, "#{conn.assigns.count} meows")
+   end
+
+-  def show(conn) do
++  def show(conn, _params) do
+     send_resp(conn, 200, "just meow")
+   end
+
+-  def create(conn) do
+-    send_resp(conn, 201, "meow!")
++  def create(conn, %{"name" => name}) do
++    send_resp(conn, 201, "#{name} meow!")
+   end
+
+   def assign_kitty_count(conn, _opts) do
+     assign(conn, :count, 42)
+   end
+ end
+```
 
 ```diff
  # feenix/controller.ex
@@ -849,35 +878,6 @@ And with one last pass, you might as well extend the DSL to support all the HTTP
  end
 ```
 
-```diff
- # your_app/controller.ex
- defmodule YourApp.Controller do
-   use Feenix.Controller
-
-   plug(:assign_kitty_count)
-
--  def index(conn) do
-+  def index(conn, _params) do
-     send_resp(conn, 200, "#{conn.assigns.count} meows")
-   end
-
--  def show(conn) do
-+  def show(conn, _params) do
-     send_resp(conn, 200, "just meow")
-   end
-
--  def create(conn) do
--    Plug.Conn.send_resp(conn, 201, "created!")
-+  def create(conn, %{"name" => name}) do
-+    send_resp(conn, 201, "created #{name}!")
-   end
-
-   def assign_kitty_count(conn, _opts) do
-     assign(conn, :count, 42)
-   end
- end
-```
-
 ### Bonus: Path Parameters
 
 ```diff
@@ -889,6 +889,33 @@ And with one last pass, you might as well extend the DSL to support all the HTTP
 -  get "/cats/felix", YourApp.Controller, :show
 +  get "/cats/:name", YourApp.Controller, :show
    post "/cats", YourApp.Controller, :create
+ end
+```
+
+```diff
+ # your_app/controller.ex
+ defmodule YourApp.Controller do
+   use Feenix.Controller
+
+   plug(:assign_kitty_count)
+
+   def index(conn, _params) do
+     send_resp(conn, 200, "#{conn.assigns.count} meows")
+   end
+
+-  def show(conn, _params) do
+-    send_resp(conn, 200, "just meow")
++  def show(conn, %{"name" => name}) do
++    send_resp(conn, 200, "#{name} meow")
+   end
+
+   def create(conn, %{"name" => name}) do
+     send_resp(conn, 201, "created #{name}!")
+   end
+
+   def assign_kitty_count(conn, _opts) do
+     assign(conn, :count, 42)
+   end
  end
 ```
 
@@ -961,38 +988,10 @@ defmodule Feenix.Controller.Params do
   plug(:merge_params)
 
   def merge_params(conn, _opts) do
-    %{params: params, path_params: path_params} = conn
-    merged_params = Map.merge(params, path_params)
-    %{conn | params: merged_params}
+    params = Map.merge(conn.query_params, conn.path_params)
+    %{conn | params: params}
   end
 end
-```
-
-```diff
- # your_app/controller.ex
- defmodule YourApp.Controller do
-   use Feenix.Controller
-
-   plug(:assign_kitty_count)
-
-   def index(conn, _params) do
-     send_resp(conn, 200, "#{conn.assigns.count} meows")
-   end
-
--  def show(conn, _params) do
--    send_resp(conn, 200, "just meow")
-+  def show(conn, %{"name" => name}) do
-+    send_resp(conn, 200, "#{name} meow")
-   end
-
-   def create(conn, %{"name" => name}) do
-     send_resp(conn, 201, "created #{name}!")
-   end
-
-   def assign_kitty_count(conn, _opts) do
-     assign(conn, :count, 42)
-   end
- end
 ```
 
 ## Summary
