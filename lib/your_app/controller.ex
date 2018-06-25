@@ -8,6 +8,6 @@ defmodule YourApp.Controller do
   # end
 
   # def create(conn) do
-  #   send_resp(conn, 201, "created!")
+  #   send_resp(conn, 201, "meow!")
   # end
 end
