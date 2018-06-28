@@ -21,6 +21,6 @@ defmodule BuildFeenix.MixProject do
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do
-    [{:plug, "~>1.5"}, {:cowboy, "~>2.4"}]
+    [{:plug, "~>1.5"}, {:cowboy, "~>1.0"}]
   end
 end
