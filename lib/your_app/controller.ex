@@ -1,5 +1,5 @@
 defmodule YourApp.Controller do
-  use Feenix.Controller
+  use Phoenix.Controller
 
   plug(Feenix.Params)
   plug(:assigns_kitty_count)

@@ -24,6 +24,7 @@ defmodule BuildFeenix.MixProject do
     [
       {:plug, "~>1.5"},
       {:cowboy, "~>1.0"},
+      {:phoenix, "~>1.3"},
     ]
   end
 end

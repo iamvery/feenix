@@ -1,5 +1,5 @@
 defmodule YourApp.Endpoint do
-  use Feenix.Endpoint
+  use Phoenix.Endpoint, otp_app: :your_app
 
   plug(Plug.Logger)
   plug(YourApp.Router)

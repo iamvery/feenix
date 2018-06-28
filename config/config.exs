@@ -2,9 +2,9 @@
 # and its dependencies with the aid of the Mix.Config module.
 use Mix.Config
 
-# config :your_app, YourApp.Endpoint,
-#   http: [port: 4000],
-#   server: true
+config :your_app, YourApp.Endpoint,
+  http: [port: 4000],
+  server: true
 
 # This configuration is loaded before any dependency and is restricted
 # to this project. If another project depends on this project, this

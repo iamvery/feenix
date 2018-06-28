@@ -1,5 +1,5 @@
 defmodule YourApp.Router do
-  use Feenix.Router
+  use Phoenix.Router
 
   get "/cats", YourApp.Controller, :index
   get "/cats/:name", YourApp.Controller, :show
