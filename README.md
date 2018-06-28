@@ -58,7 +58,7 @@ created Garfield!
 
 So where's the function pipeline? If you know anything about Plug, that's a strong hint. The whole idea behind Plug is creating function pipelines, _plugs_. If you're familiar with Ruby, you can sort of think of Plug as the Elixir equivalent of Ruby's Rack, which is itself a function pipeline.
 
-You can sort of see how the router is _plugged_ into the endpoint, and it sort of seems to delegate to the controller for certain requests. But routers are very declarative. How does that work? In a word, metaprogramming. Phoenix uses Elixir's rich metaprogramming model to surface a simple DSL for _declaring_ routes so that you don't have to fool with the pattern-matching underpinnings of its implementation.
+You can sort of see how the router is _plugged_ into the endpoint, and it seems to delegate to the controller for certain requests. But routers are very declarative. How does that work? In a word, metaprogramming. Phoenix uses Elixir's rich metaprogramming model to surface a simple DSL for _declaring_ routes so that you don't have to fool with the pattern-matching underpinnings of its implementation.
 
 ### The Endpoint
 
@@ -99,7 +99,7 @@ world
 %Plug.Conn{...}
 ```
 
-Cool! That sets up most of #2, but the endpoint still needs to handle the web requests that you wish to pipe _into_ it. Lucky you, Plug has a convenient adapter to Cowboy, a popular Erlang web server.
+Cool! That sets up most of #2 above, but the endpoint still needs to handle the web requests that you wish to pipe _into_ it. Lucky you, Plug has a convenient adapter to Cowboy, a popular Erlang web server.
 
 ```diff
  # your_app.ex
@@ -124,7 +124,7 @@ Cool! That sets up most of #2, but the endpoint still needs to handle the web re
  defmodule YourApp.Endpoint do
 +  def start_link do
 +    options = []
-+    Plug.Adapters.Cowboy2.http(__MODULE__, options)
++    Plug.Adapters.Cowboy.http(__MODULE__, options)
 +  end
 +
    use Plug.Builder
@@ -190,9 +190,9 @@ That's about it for the endpoint, but as you can see from the request we sent ou
 
 ### The Router
 
-You have a web app! Pretty exciting, but chances are your app is more complicated than what can be done with a single function. You will want to be able to model different pages and resources using the request path. This is web app 101, and Phoenix solves this problem by _routing_ requests to different functions handy for constructing responses. That's the purpose of the Router. Receive a request, and based on its details like the HTTP verb and path, figure out which function should handle buliding a response.
+You have a web app! Pretty exciting, but chances are your app is more complicated than what can be done with a single function. You will want to be able to model different pages and resources using the request path. This is web app 101, and Phoenix solves this problem by _matching_ requests to different functions handy for constructing responses. That's the purpose of the Router. Receive a request, and based on its details like the HTTP verb and path, figure out which function should handle buliding a response.
 
-Plug your router into your endpoint.
+Plug your router into the endpoint.
 
 ```diff
  # your_app/endpoint.ex
@@ -249,7 +249,7 @@ defmodule YourApp.Router do
 end
 ```
 
-Most of the "magic" comes from Plug. You can see that a `%Plug.Conn{}` has a `path_info` property. The value of this property is a data structure that plug parses the request path into. Pattern matching is a great fit for function dispatch!
+Most of the "magic" comes from Plug. You can see that a `%Plug.Conn{}` has a `path_info` property. The value of this property is a data structure that plug parses the request path into. Pattern matching is a great fit for function dispatch! For example, the path `/cats/felix` becomes the path info `["cats", "felix"]`.
 
 Make some requests.
 
@@ -260,7 +260,7 @@ $ curl http://localhost:4000/cats/felix
 just meow
 ```
 
-Looking good! But you probably recognize that this isn't looking much like a Phoenix application. For one, you never have to write your own matching functions like this. Phoenix provides a DSL. We'll get to that shortly, but for now let's talk about _controllers_.
+Looking good! But you probably recognize that this isn't looking much like a Phoenix application yet. For one, you never have to write your own matching functions like this. Phoenix provides a DSL. We'll get to that shortly, but for now let's talk about _controllers_.
 
 ### The Controller
 
@@ -436,7 +436,7 @@ You'll recall that we ended up with a pretty reasonable endpoint implementation,
  defmodule YourApp.Endpoint do
 -  def start_link do
 -    options = []
--    Plug.Adapters.Cowboy2.http(__MODULE__, options)
+-    Plug.Adapters.Cowboy.http(__MODULE__, options)
 -  end
 -
 -  use Plug.Builder
@@ -454,7 +454,7 @@ defmodule Feenix.Endpoint do
     quote do
       def start_link do
         options = []
-        Plug.Adapters.Cowboy2.http(__MODULE__, options)
+        Plug.Adapters.Cowboy.http(__MODULE__, options)
       end
 
       use Plug.Builder
@@ -463,7 +463,7 @@ defmodule Feenix.Endpoint do
 end
 ```
 
-That looks much more like a Phoenix endpoint. The final offender is the router.
+That looks much more like a Phoenix endpoint. Hope over the router for now and look at the controller.
 
 ### The Controller
 
@@ -587,7 +587,7 @@ $ curl http://localhost:4000/cats/
 42 meows
 ```
 
-Now that your controllers are looking great, it's time to circle back and attack the test of the app. The endpoint abstraction is pretty straight-forwards. Tackle that next.
+Now that your controllers are looking great, it's time to circle back and attack the router. Tackle that next.
 
 ### The Router
 
@@ -787,6 +787,8 @@ And with one last pass, you might as well extend the DSL to support all the HTTP
 
 ### Bonus: 404
 
+Currently, requesting any path that does not match a route results in a 500 error, because there is no matching definition of `do_match`. You can make this a little better with a default implementation that responds 404, not found.
+
 ```diff
  # feenix/router.ex
  defmodule Feenix.Router do
@@ -815,6 +817,8 @@ And with one last pass, you might as well extend the DSL to support all the HTTP
 ```
 
 ### Bonus: Parameters
+
+There's a pretty big missing piece in your implementation of Feenix. In Phoenix, controller actions take _two_ arguments: the conn, and the parameters. In Phoenix, `params` are the parsed query parameters (combined with path and body parameters as well). Keep things simple by starting with query parameters.
 
 ```diff
  # your_app/controller.ex
@@ -880,6 +884,8 @@ And with one last pass, you might as well extend the DSL to support all the HTTP
 
 ### Bonus: Path Parameters
 
+As we add more and more behavior to Feenix, the implementation gets a little more complex. While this still isn't _insane_, it will take a little work to add support for _path_ parameters. In Phoenix, we often use routing syntax like `/users/:id` to match a parameter in the path itself. Build that.
+
 ```diff
  # your_app/router.ex
  defmodule YourApp.Router do
@@ -918,6 +924,8 @@ And with one last pass, you might as well extend the DSL to support all the HTTP
    end
  end
 ```
+
+The key here is identifying the parameters in the path inserting them into the `conn` when the request is matched.
 
 ```diff
  # feenix/router/dsl.ex
@@ -979,6 +987,8 @@ And with one last pass, you might as well extend the DSL to support all the HTTP
  end
 ```
 
+Finally, the query parameters and path parameters are merged into the common `params` key in the `Plug.Conn`.
+
 ```elixir
 # feenix/controller/params.ex
 defmodule Feenix.Controller.Params do
@@ -994,19 +1004,16 @@ defmodule Feenix.Controller.Params do
 end
 ```
 
+Great! Now you can _dynamically_ request a cat by its name.
+
 ## Summary
 
 So how many lines of framework code did we write?
 
 ```
-» git diff master --numstat | grep feenix | cut -f1 | paste -sd+ - | bc
-77
-```
-```
 » git diff master --stat -- lib/feenix
-lib/feenix/controller.ex | 27 ++++++++++++++++++++++++++-
-lib/feenix/endpoint.ex   | 12 +++++++++++-
-lib/feenix/router.ex     | 41 ++++++++++++++++++++++++++++++++++++++++-
-3 files changed, 77 insertions(+), 3 deletions(-)
+...
+_ files changed, _ insertions(+), _ deletions(-)
 ```
 
+About 80?
