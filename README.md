@@ -62,13 +62,13 @@ You can sort of see how the router is _plugged_ into the endpoint, and it sort o
 
 ### The Endpoint
 
-The entry point for a request in a Phoenix app is the _endpoint_. That's it, the first step. What purpose does an endpoint serve? Let me name them:
+The entry point for a request in a Phoenix app is the _endpoint_. Ah hah! The first step. What purpose does an endpoint serve? Let me name them:
 
 1. It sets up the Elixir web server to handle requests.
 2. It preprocesses the request in various ways. Rubyists think: Rack middleware. This includes things like handling static assets, implementing HTTP method override, and logging requests. (take a peek at the generated endpoint.ex in your Phoenix projects)
 3. It hands off (pipes) the request to your router!
 
-Start simple, make your app's endpoint a pipeline using [`Plug.Builder`](https://hexdocs.pm/plug/Plug.Builder.html).
+Start simple, make your app's endpoint a pipeline using [`Plug.Builder`](https://hexdocs.pm/plug/Plug.Builder.html). Plug includes lots of helpful tools like this.
 
 ```elixir
 # your_app/endpoint.ex
@@ -102,6 +102,24 @@ world
 Cool! That sets up most of #2, but the endpoint still needs to handle the web requests that you wish to pipe _into_ it. Lucky you, Plug has a convenient adapter to Cowboy, a popular Erlang web server.
 
 ```diff
+ # your_app.ex
+ defmodule YourApp do
+   use Application
+
+   def start(_type, _args) do
+     import Supervisor.Spec
+
+     children = [
+-      # supervisor(YourApp.Endpoint, []),
++      supervisor(YourApp.Endpoint, []),
+     ]
+
+     Supervisor.start_link(children, strategy: :one_for_one, name: YourApp.Supervisor)
+   end
+ end
+```
+
+```diff
  # your_app/endpoint.ex
  defmodule YourApp.Endpoint do
 +  def start_link do
@@ -124,24 +142,6 @@ Cool! That sets up most of #2, but the endpoint still needs to handle the web re
 -    IO.puts("world")
 -    conn
 +    send_resp(conn, 200, "hello #{conn.private.name}")
-   end
- end
-```
-
-```diff
- # your_app.ex
- defmodule YourApp do
-   use Application
-
-   def start(_type, _args) do
-     import Supervisor.Spec
-
-     children = [
--      # supervisor(YourApp.Endpoint, []),
-+      supervisor(YourApp.Endpoint, []),
-     ]
-
-     Supervisor.start_link(children, strategy: :one_for_one, name: YourApp.Supervisor)
    end
  end
 ```
@@ -264,7 +264,7 @@ Looking good! But you probably recognize that this isn't looking much like a Pho
 
 ### The Controller
 
-It would be unwhieldy define the behavior of every route in the router. Controllers give you a mechanism of collecting related functions into modules as destinations for routed requests. Continue to iterate on you app by extracting response-building logic to a controller. Your router should call your controller.
+It would be unwhieldy to define the behavior of every route in the router. Controllers give you a mechanism of collecting related functions into modules as destinations for routed requests. Continue to iterate on you app by extracting response-building logic to a controller. Your router should call your controller.
 
 ```diff
  # your_app/router.ex
@@ -701,12 +701,12 @@ To make this a reality, you will need to import a new DSL macro in the router th
 ```elixir
 # feenix/router/dsl.ex
 defmodule Feenix.Router.DSL do
-  defmacro get(path, module, function) do
+  defmacro get(path, module, action) do
     {_vars, path_info} = Plug.Router.Utils.build_path_match(path)
 
     quote do
       def do_match(conn, "GET", unquote(path_info)) do
-        unquote(module).call(conn, unquote(function))
+        unquote(module).call(conn, unquote(action))
       end
     end
   end
@@ -734,21 +734,21 @@ To support other HTTP verbs, like `POST`, you'll need to generalization the impl
 ```diff
  # feenix/router/dsl.ex
  defmodule Feenix.Router.DSL do
-   defmacro get(path, module, function) do
-+    build("GET", path, module, function)
+   defmacro get(path, module, action) do
++    build("GET", path, module, action)
 +  end
 +
-+  defmacro post(path, module, function) do
-+    build("POST", path, module, function)
++  defmacro post(path, module, action) do
++    build("POST", path, module, action)
 +  end
 +
-+  def build(method, path, module, function)
++  def build(method, path, module, action)
      {_vars, path_info} = Plug.Router.Utils.build_path_match(path)
 
      quote do
 -      def do_match(conn, "GET", unquote(path_info)) do
 +      def do_match(conn, unquote(method), unquote(path_info)) do
-         unquote(module).call(conn, unquote(function))
+         unquote(module).call(conn, unquote(action))
        end
      end
    end
@@ -760,25 +760,25 @@ And with one last pass, you might as well extend the DSL to support all the HTTP
 ```diff
   # feenix/router/dsl.ex
  defmodule Feenix.Router.DSL do
--  defmacro get(path, module, function) do
--    build("GET", path, module, function)
+-  defmacro get(path, module, action) do
+-    build("GET", path, module, action)
 -  end
 -
--  defmacro post(path, module, function) do
--    build("POST", path, module, function)
+-  defmacro post(path, module, action) do
+-    build("POST", path, module, action)
 +  for method <- [:get, :post, :put, :patch, :delete] do
-+    defmacro unquote(method)(path, module, function) do
++    defmacro unquote(method)(path, module, action) do
 +      method = Plug.Router.Utils.normalize_method(unquote(method))
-+      build(method, path, module, function)
++      build(method, path, module, action)
 +    end
    end
 
-   def build(method, path, module, function)
+   def build(method, path, module, action)
      {_vars, path_info} = Plug.Router.Utils.build_path_match(path)
 
      quote do
        def do_match(conn, unquote(method), unquote(path_info)) do
-         unquote(module).call(conn, unquote(function))
+         unquote(module).call(conn, unquote(action))
        end
      end
    end
@@ -922,15 +922,15 @@ And with one last pass, you might as well extend the DSL to support all the HTTP
 ```diff
  # feenix/router/dsl.ex
  defmodule Feenix.Router.DSL do
-   defmacro get(path, module, function) do
-     build("GET", path, module, function)
+   defmacro get(path, module, action) do
+     build("GET", path, module, action)
    end
 
-   defmacro post(path, module, function) do
-     build("POST", path, module, function)
+   defmacro post(path, module, action) do
+     build("POST", path, module, action)
    end
 
-   def build(method, path, module, function)
+   def build(method, path, module, action)
 -    {_vars, path_info} = Plug.Router.Utils.build_path_match(path)
 +    {vars, path_info} = Plug.Router.Utils.build_path_match(path)
 +    path_params = Plug.Router.Utils.build_path_params_match(vars)
@@ -939,7 +939,7 @@ And with one last pass, you might as well extend the DSL to support all the HTTP
        def do_match(conn, unquote(method), unquote(path_info)) do
 +        path_params = unquote({:%{}, [], path_params})
 +        conn = update_in(conn.path_params, &Map.merge(&1, path_params))
-         unquote(module).call(conn, unquote(function))
+         unquote(module).call(conn, unquote(action))
        end
      end
    end
