@@ -40,7 +40,7 @@ defmodule YourApp.Controller do
   end
 
   def create(conn, %{"name" => name}) do
-    send_resp(conn, 201, "created #{name}!")
+    send_resp(conn, 201, "#{name} meow!")
   end
 end
 ```
