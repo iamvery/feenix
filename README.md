@@ -1006,6 +1006,57 @@ end
 
 Great! Now you can _dynamically_ request a cat by its name.
 
+### Bonus: Make it Phoenix!
+
+```diff
+ # mix.exs
+ ...
+   defp deps do
+     [
+       {:plug, "~>1.5"},
+       {:cowboy, "~>1.0"},
++      {:phoenix, "~>1.3"},
+     ]
+   end
+ end
+```
+
+```diff
+ # config/config.exs
+ use Mix.Config
+
+-# config :your_app, YourApp.Endpoint,
+-#   http: [port: 4000],
+-#   server: true
++config :your_app, YourApp.Endpoint,
++  http: [port: 4000],
++  server: true
+```
+
+```diff
+ # your_app/endpoint.ex
+ defmodule YourApp.Endpoint do
+-  use Feenix.Endpoint
++  use Phoenix.Endpoint, otp_app: :your_app
+ ...
+```
+
+```diff
+ # your_app/router.ex
+ defmodule YourApp.Router do
+-  use Feenix.Router
++  use Phoenix.Router
+ ...
+```
+
+```diff
+ # your_app/controller.ex
+ defmodule YourApp.Controller do
+-  use Feenix.Controller
++  use Phoenix.Controller
+ ...
+```
+
 ## Summary
 
 So how many lines of framework code did we write?
