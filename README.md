@@ -785,37 +785,6 @@ And with one last pass, you might as well extend the DSL to support all the HTTP
  end
 ```
 
-### Bonus: 404
-
-Currently, requesting any path that does not match a route results in a 500 error, because there is no matching definition of `do_match`. You can make this a little better with a default implementation that responds 404, not found.
-
-```diff
- # feenix/router.ex
- defmodule Feenix.Router do
-   defmacro __using__(_opts) do
-     quote do
-       @before_compile unquote(__MODULE__)
-       use Plug.Builder
-       import Feenix.Router.DSL
-
-       def match(conn, _opts) do
-         do_match(conn, conn.method, conn.path_info)
-       end
-     end
-   end
-
-   defmacro __before_compile__(_env) do
-     quote do
-       plug(:match)
-+
-+      def do_match(conn, _method, _path_info) do
-+        send_resp(conn, 404, "not found")
-+      end
-     end
-   end
- end
-```
-
 ### Bonus: Parameters
 
 There's a pretty big missing piece in your implementation of Feenix. In Phoenix, controller actions take _two_ arguments: the conn, and the parameters. In Phoenix, `params` are the parsed query parameters (combined with path and body parameters as well). Keep things simple by starting with query parameters.
@@ -877,6 +846,90 @@ There's a pretty big missing piece in your implementation of Feenix. In Phoenix,
    defmacro __before_compile__(_env) do
      quote do
        plug(:apply_action)
+     end
+   end
+ end
+```
+
+### Bonus: Make it Phoenix!
+
+```diff
+ # mix.exs
+ ...
+   defp deps do
+     [
+       {:plug, "~>1.5"},
+       {:cowboy, "~>1.0"},
++      {:phoenix, "~>1.3"},
+     ]
+   end
+ end
+```
+
+```diff
+ # config/config.exs
+ use Mix.Config
+
+-# config :your_app, YourApp.Endpoint,
+-#   http: [port: 4000],
+-#   server: true
++config :your_app, YourApp.Endpoint,
++  http: [port: 4000],
++  server: true
+```
+
+```diff
+ # your_app/endpoint.ex
+ defmodule YourApp.Endpoint do
+-  use Feenix.Endpoint
++  use Phoenix.Endpoint, otp_app: :your_app
+ ...
+```
+
+```diff
+ # your_app/router.ex
+ defmodule YourApp.Router do
+-  use Feenix.Router
++  use Phoenix.Router
+ ...
+```
+
+```diff
+ # your_app/controller.ex
+ defmodule YourApp.Controller do
+-  use Feenix.Controller
++  use Phoenix.Controller
+ ...
+```
+
+Note: `fetch_query_param` is actually included in a Phoenix application's Endpoint module via `plug(Plug.Parsers)`. See https://hexdocs.pm/plug/Plug.Parsers.html.
+
+### Bonus: 404
+
+Currently, requesting any path that does not match a route results in a 500 error, because there is no matching definition of `do_match`. You can make this a little better with a default implementation that responds 404, not found.
+
+```diff
+ # feenix/router.ex
+ defmodule Feenix.Router do
+   defmacro __using__(_opts) do
+     quote do
+       @before_compile unquote(__MODULE__)
+       use Plug.Builder
+       import Feenix.Router.DSL
+
+       def match(conn, _opts) do
+         do_match(conn, conn.method, conn.path_info)
+       end
+     end
+   end
+
+   defmacro __before_compile__(_env) do
+     quote do
+       plug(:match)
++
++      def do_match(conn, _method, _path_info) do
++        send_resp(conn, 404, "not found")
++      end
      end
    end
  end
@@ -1005,57 +1058,6 @@ end
 ```
 
 Great! Now you can _dynamically_ request a cat by its name.
-
-### Bonus: Make it Phoenix!
-
-```diff
- # mix.exs
- ...
-   defp deps do
-     [
-       {:plug, "~>1.5"},
-       {:cowboy, "~>1.0"},
-+      {:phoenix, "~>1.3"},
-     ]
-   end
- end
-```
-
-```diff
- # config/config.exs
- use Mix.Config
-
--# config :your_app, YourApp.Endpoint,
--#   http: [port: 4000],
--#   server: true
-+config :your_app, YourApp.Endpoint,
-+  http: [port: 4000],
-+  server: true
-```
-
-```diff
- # your_app/endpoint.ex
- defmodule YourApp.Endpoint do
--  use Feenix.Endpoint
-+  use Phoenix.Endpoint, otp_app: :your_app
- ...
-```
-
-```diff
- # your_app/router.ex
- defmodule YourApp.Router do
--  use Feenix.Router
-+  use Phoenix.Router
- ...
-```
-
-```diff
- # your_app/controller.ex
- defmodule YourApp.Controller do
--  use Feenix.Controller
-+  use Phoenix.Controller
- ...
-```
 
 ## Summary
 
