@@ -1,5 +1,9 @@
 # Let's Build a Phoenix!
 
+See the complete implementation commit-by-commit at https://gitlab.com/iamvery/feenix/merge_requests/1/commits.
+
+---
+
 When you get started with Elixir Phoenix, you'll often hear "it's just a function pipeline!" Okay! But when you look at an app, it doesn't really _look_ like it. Is it? If so, how? Let's dive it!
 
 Here's an example of a basic Phoenix application:
