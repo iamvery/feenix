@@ -1,10 +1,26 @@
 # Let's Build a Phoenix!
 
-See the complete implementation commit-by-commit at https://gitlab.com/iamvery/feenix/merge_requests/1/commits.
+See the complete implementation commit-by-commit at https://gitlab.com/iamvery/feenix/merge_requests/1/commits. Here's the rough outline.
+
+1. Introduce `Endpoint` (illustrate `Plug` manually)
+2. Make `Endpoint` a web server (bonus: `Plug.Logger`)
+3. Handoff to `Router`
+4. Handoff to `Controller`
+5. Make `Controller` plug
+6. Extract static `Endpoint` framework
+7. Extract static `Controller` framework (note: order problem)
+8. Extract static `Router` framework (note: same order problem)
+9. Extract `Router.DSL`
+10. Add query parameters
+11. Make it Phoenix!
+
+Bonus: 404
+
+Bonus: Path parameters
 
 ---
 
-When you get started with Elixir Phoenix, you'll often hear "it's just a function pipeline!" Okay! But when you look at an app, it doesn't really _look_ like it. Is it? If so, how? Let's dive it!
+When you get started with Elixir Phoenix, you'll often hear "it's just a pipeline!" Okay! But when you look at an app, it doesn't really _look_ like it. Is it? If so, how? Let's dive it!
 
 Here's an example of a basic Phoenix application:
 
@@ -60,13 +76,13 @@ $ curl -X POST 'http://localhost:4000/cats?name=Garfield'
 created Garfield!
 ```
 
-So where's the function pipeline? If you know anything about Plug, that's a strong hint. The whole idea behind Plug is creating function pipelines, _plugs_. If you're familiar with Ruby, you can sort of think of Plug as the Elixir equivalent of Ruby's Rack, which is itself a function pipeline.
+So where's the pipeline? If you know anything about Plug, that's a strong hint. The whole idea behind Plug is plugging functions together into pipelines. If you're familiar with Ruby, you can sort of think of Plug as the Elixir equivalent of Ruby's Rack, which is itself a pipeline.
 
 You can sort of see how the router is _plugged_ into the endpoint, and it seems to delegate to the controller for certain requests. But routers are very declarative. How does that work? In a word, metaprogramming. Phoenix uses Elixir's rich metaprogramming model to surface a simple DSL for _declaring_ routes so that you don't have to fool with the pattern-matching underpinnings of its implementation.
 
 ### The Endpoint
 
-The entry point for a request in a Phoenix app is the _endpoint_. Ah hah! The first step. What purpose does an endpoint serve? Let me name them:
+The entry point for a request in a Phoenix app is the _endpoint_. Ah hah! The first step. What purpose does an endpoint serve?
 
 1. It sets up the Elixir web server to handle requests.
 2. It preprocesses the request in various ways. Rubyists think: Rack middleware. This includes things like handling static assets, implementing HTTP method override, and logging requests. (take a peek at the generated endpoint.ex in your Phoenix projects)
@@ -194,7 +210,7 @@ That's about it for the endpoint, but as you can see from the request we sent ou
 
 ### The Router
 
-You have a web app! Pretty exciting, but chances are your app is more complicated than what can be done with a single function. You will want to be able to model different pages and resources using the request path. This is web app 101, and Phoenix solves this problem by _matching_ requests to different functions handy for constructing responses. That's the purpose of the Router. Receive a request, and based on its details like the HTTP verb and path, figure out which function should handle buliding a response.
+You have a web app! Pretty exciting, but chances are your app's needs are more complicated than what can be done with a single function. You will want to be able to model different pages and resources using the request path. This is web app 101, and Phoenix solves this problem by _matching_ requests to different functions handy for constructing responses. That's the purpose of the Router. Receive a request, and based on its details like the HTTP verb and path, figure out which function should handle buliding a response.
 
 Plug your router into the endpoint.
 
@@ -208,6 +224,7 @@ Plug your router into the endpoint.
 
    use Plug.Builder
 
+   plug(Plug.Logger)
 -  plug(:hello)
 -  plug(:world)
 -
@@ -222,7 +239,7 @@ Plug your router into the endpoint.
  end
 ```
 
-Just like the endpoint, the router is a _function pipeline_ (seeing a theme?) Functions can be _plugged_ in router to handle shared concerns like authentication and content type negotiation.
+Just like the endpoint, the router is a _pipeline_ (seeing a theme?) Functions can be _plugged_ in router to handle shared concerns like authentication and content type negotiation.
 
 Start by making your router a pipeline with `Plug.Builder` and define a few routes to _match_ on.
 
@@ -268,7 +285,7 @@ Looking good! But you probably recognize that this isn't looking much like a Pho
 
 ### The Controller
 
-It would be unwhieldy to define the behavior of every route in the router. Controllers give you a mechanism of collecting related functions into modules as destinations for routed requests. Continue to iterate on you app by extracting response-building logic to a controller. Your router should call your controller.
+It would be unwieldy to define the behavior of every route in the router. Controllers give you a mechanism of collecting related functions into modules as destinations for routed requests. Continue to iterate on you app by extracting response-building logic to a controller.
 
 ```diff
  # your_app/router.ex
@@ -321,7 +338,7 @@ defmodule YourApp.Controller do
 end
 ```
 
-This is a good start, but there's an important piece missing. Controllers are also function pipelines, so we need to make our controller pluggable. This allows you do to things on the connection before your controller actions run.
+This is a good start, but there's an important piece missing. Controllers are also pipelines, so we need to make our controller pluggable. This allows you do to things on the connection before your controller actions run.
 
 To illustrate this problem, consider setting some data in a plug in your controller.
 
@@ -433,7 +450,7 @@ The "magic" of Phoenix is how it uses Elixir metaprogramming to abstract away th
 
 ### The Endpoint
 
-You'll recall that we ended up with a pretty reasonable endpoint implementation, but it leaks some details about the webserver setup that you can easily get it out of users' faces with a macro.
+You'll recall that we ended up with a pretty reasonable endpoint implementation, but it leaks some details about the webserver setup that you can easily get it out of the way with a macro.
 
 ```diff
  # your_app/endpoint.ex
@@ -467,7 +484,7 @@ defmodule Feenix.Endpoint do
 end
 ```
 
-That looks much more like a Phoenix endpoint. Hope over the router for now and look at the controller.
+That looks much more like a Phoenix endpoint. Hop over the router for now and look at the controller next.
 
 ### The Controller
 
@@ -597,7 +614,7 @@ Now that your controllers are looking great, it's time to circle back and attack
 
 Remember how your router looks nothing like a Phoenix router? It's full of manual matching logic that you shouldn't have to think much about as a user. It's time to clean up the router and introduce the DSL for defining routes.
 
-Ease into this effort by just abstracting the static parts of the router abstraction first by generating them with a macro. It's important to consider that the router will suffer from the same "early action" bug that you noticed earlier in the controller. That is users must have a chance to add plugs _before_ a request is routed to the controller. So use `@before_action` to solve that problem in the router abstraction as well.
+Ease into this effort by just abstracting the static parts of the router abstraction first by generating them with a macro.
 
 ```diff
  # your_app/router.ex
@@ -798,6 +815,7 @@ There's a pretty big missing piece in your implementation of Feenix. In Phoenix,
  defmodule YourApp.Controller do
    use Feenix.Controller
 
++  plug(:fetch_query_params)
    plug(:assign_kitty_count)
 
 -  def index(conn) do
@@ -829,10 +847,7 @@ There's a pretty big missing piece in your implementation of Feenix. In Phoenix,
      quote do
        @before_compile unquote(__MODULE__)
 
-       import Plug.Conn
-
        use Plug.Builder
-+      plug(:fetch_query_params)
 
        def call(conn, action) do
          conn
@@ -854,59 +869,6 @@ There's a pretty big missing piece in your implementation of Feenix. In Phoenix,
    end
  end
 ```
-
-### Bonus: Make it Phoenix!
-
-```diff
- # mix.exs
- ...
-   defp deps do
-     [
-       {:plug, "~>1.5"},
-       {:cowboy, "~>1.0"},
-+      {:phoenix, "~>1.3"},
-     ]
-   end
- end
-```
-
-```diff
- # config/config.exs
- use Mix.Config
-
--# config :your_app, YourApp.Endpoint,
--#   http: [port: 4000],
--#   server: true
-+config :your_app, YourApp.Endpoint,
-+  http: [port: 4000],
-+  server: true
-```
-
-```diff
- # your_app/endpoint.ex
- defmodule YourApp.Endpoint do
--  use Feenix.Endpoint
-+  use Phoenix.Endpoint, otp_app: :your_app
- ...
-```
-
-```diff
- # your_app/router.ex
- defmodule YourApp.Router do
--  use Feenix.Router
-+  use Phoenix.Router
- ...
-```
-
-```diff
- # your_app/controller.ex
- defmodule YourApp.Controller do
--  use Feenix.Controller
-+  use Phoenix.Controller
- ...
-```
-
-Note: `fetch_query_param` is actually included in a Phoenix application's Endpoint module via `plug(Plug.Parsers)`. See https://hexdocs.pm/plug/Plug.Parsers.html.
 
 ### Bonus: 404
 
@@ -960,6 +922,8 @@ As we add more and more behavior to Feenix, the implementation gets a little mor
  defmodule YourApp.Controller do
    use Feenix.Controller
 
+-  plug(:fetch_query_params)
++  plug(Feenix.Params)
    plug(:assign_kitty_count)
 
    def index(conn, _params) do
@@ -1011,44 +975,11 @@ The key here is identifying the parameters in the path inserting them into the `
  end
 ```
 
-```diff
- # feenix/controller.ex
- defmodule Feenix.Controller do
-   defmacro __using__(_opts) do
-     quote do
-       @before_compile unquote(__MODULE__)
-
-       import Plug.Conn
-
-       use Plug.Builder
--      plug(:fetch_query_params)
-+      plug(Feenix.Controller.Params)
-
-       def call(conn, action) do
-         conn
-         |> put_private(:action, action)
-         |> super(nil)
-       end
-
-       def apply_action(conn, _opts) do
-         apply(__MODULE__, conn.private.action, [conn, conn.params])
-       end
-     end
-   end
-
-   defmacro __before_compile__(_env) do
-     quote do
-       plug(:apply_action)
-     end
-   end
- end
-```
-
 Finally, the query parameters and path parameters are merged into the common `params` key in the `Plug.Conn`.
 
 ```elixir
-# feenix/controller/params.ex
-defmodule Feenix.Controller.Params do
+# feenix/params.ex
+defmodule Feenix.Params do
   use Plug.Builder
 
   plug(:fetch_query_parameters)
@@ -1062,6 +993,59 @@ end
 ```
 
 Great! Now you can _dynamically_ request a cat by its name.
+
+### Bonus: Make it Phoenix!
+
+```diff
+ # mix.exs
+ ...
+   defp deps do
+     [
+       {:plug, "~>1.5"},
+       {:cowboy, "~>1.0"},
++      {:phoenix, "~>1.3"},
+     ]
+   end
+ end
+```
+
+```diff
+ # config/config.exs
+ use Mix.Config
+
+-# config :your_app, YourApp.Endpoint,
+-#   http: [port: 4000],
+-#   server: true
++config :your_app, YourApp.Endpoint,
++  http: [port: 4000],
++  server: true
+```
+
+```diff
+ # your_app/endpoint.ex
+ defmodule YourApp.Endpoint do
+-  use Feenix.Endpoint
++  use Phoenix.Endpoint, otp_app: :your_app
+ ...
+```
+
+```diff
+ # your_app/router.ex
+ defmodule YourApp.Router do
+-  use Feenix.Router
++  use Phoenix.Router
+ ...
+```
+
+```diff
+ # your_app/controller.ex
+ defmodule YourApp.Controller do
+-  use Feenix.Controller
++  use Phoenix.Controller
+ ...
+```
+
+Note: `fetch_query_param` is actually typically included in a Phoenix application's Endpoint module via `plug(Plug.Parsers)`. See https://hexdocs.pm/plug/Plug.Parsers.html.
 
 ## Summary
 
