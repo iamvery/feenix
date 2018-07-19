@@ -1,5 +1,7 @@
 defmodule YourApp.Router do
-  # get "/cats"
-  # get "/cats/felix"
-  # post "/cats"
+  use Phoenix.Router
+
+  get "/cats", YourApp.Controller, :index
+  get "/cats/:name", YourApp.Controller, :show
+  post "/cats", YourApp.Controller, :create
 end
